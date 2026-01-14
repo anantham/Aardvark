@@ -14,12 +14,17 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { PaymentsService } from './payments.service';
+import { RazorpayService } from './razorpay.service';
 import {
   CreateCreditCheckoutDto,
   CreateSubscriptionCheckoutDto,
   CreateSetupIntentDto,
   CreateConnectAccountDto,
   CancelSubscriptionDto,
+  CreateUPIOrderDto,
+  VerifyUPIPaymentDto,
+  SetupUPIPayoutAccountDto,
+  RequestUPIPayoutDto,
 } from './dto';
 
 /**
@@ -30,6 +35,7 @@ import {
 export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
+    private readonly razorpayService: RazorpayService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -381,6 +387,206 @@ export class PaymentsController {
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
+
+    return { received: true };
+  }
+
+  // ============================================================================
+  // UPI Payments (India - Razorpay)
+  // ============================================================================
+
+  /**
+   * Create UPI payment order for credit bundle purchase
+   * POST /payments/upi/order
+   */
+  @Post('upi/order')
+  async createUPIOrder(
+    @Req() req: any,
+    @Body() dto: CreateUPIOrderDto,
+  ) {
+    const userId = req.user?.id || 'mock-user-id';
+
+    const { order, razorpayKeyId } = await this.razorpayService.createOrder(
+      userId,
+      dto.bundleId,
+    );
+
+    return {
+      success: true,
+      data: {
+        orderId: order.id,
+        razorpayOrderId: order.razorpayOrderId,
+        amountInPaise: order.amountInPaise,
+        currency: order.currency,
+        keyId: razorpayKeyId,
+        receipt: order.receipt,
+      },
+    };
+  }
+
+  /**
+   * Verify UPI payment after completion
+   * POST /payments/upi/verify
+   */
+  @Post('upi/verify')
+  async verifyUPIPayment(
+    @Req() req: any,
+    @Body() dto: VerifyUPIPaymentDto,
+  ) {
+    const order = await this.razorpayService.verifyPayment(
+      dto.razorpayOrderId,
+      dto.razorpayPaymentId,
+      dto.razorpaySignature,
+    );
+
+    // TODO: Add credits to user's balance based on order.referenceId (bundleId)
+    // This should call creditsService.addCreditsFromPurchase()
+
+    return {
+      success: true,
+      data: {
+        orderId: order.id,
+        status: order.status,
+        method: order.method,
+        vpa: order.vpa,
+        paidAt: order.paidAt,
+      },
+    };
+  }
+
+  /**
+   * Get Razorpay key ID for frontend integration
+   * GET /payments/upi/config
+   */
+  @Get('upi/config')
+  getUPIConfig() {
+    return {
+      success: true,
+      data: {
+        keyId: this.razorpayService.getKeyId(),
+        currency: 'INR',
+        name: 'Aardvark',
+        description: 'Interactive Fiction Platform',
+      },
+    };
+  }
+
+  // ============================================================================
+  // UPI Payouts (Author)
+  // ============================================================================
+
+  /**
+   * Setup author's UPI payout account
+   * POST /payments/upi/payout-account
+   */
+  @Post('upi/payout-account')
+  async setupUPIPayoutAccount(
+    @Req() req: any,
+    @Body() dto: SetupUPIPayoutAccountDto,
+  ) {
+    const authorId = req.user?.id || 'mock-author-id';
+
+    const account = await this.razorpayService.setupAuthorUPIAccount(
+      authorId,
+      dto.upiVpa,
+      dto.accountHolderName,
+    );
+
+    return {
+      success: true,
+      data: {
+        id: account.id,
+        upiVpa: account.upiVpa,
+        accountHolderName: account.upiAccountHolderName,
+        verified: account.upiVerified,
+        payoutsEnabled: account.payoutsEnabled,
+      },
+    };
+  }
+
+  /**
+   * Get author's UPI payout account status
+   * GET /payments/upi/payout-account
+   */
+  @Get('upi/payout-account')
+  async getUPIPayoutAccount(@Req() req: any) {
+    // TODO: Get from database
+    return {
+      success: true,
+      data: null, // Return null if not set up
+    };
+  }
+
+  /**
+   * Request UPI payout
+   * POST /payments/upi/payout
+   */
+  @Post('upi/payout')
+  async requestUPIPayout(
+    @Req() req: any,
+    @Body() dto: RequestUPIPayoutDto,
+  ) {
+    const authorId = req.user?.id || 'mock-author-id';
+
+    // TODO: Calculate available balance from earnings
+    const availableBalancePaise = dto.amount || 50000; // Default mock
+
+    const payout = await this.razorpayService.createPayout(
+      authorId,
+      availableBalancePaise,
+      'Aardvark author earnings',
+    );
+
+    return {
+      success: true,
+      data: {
+        id: payout.id,
+        amount: payout.amount,
+        currency: payout.currency,
+        status: payout.status,
+        upiVpa: payout.upiVpa,
+        requestedAt: payout.requestedAt,
+      },
+    };
+  }
+
+  /**
+   * Get payout history
+   * GET /payments/upi/payouts
+   */
+  @Get('upi/payouts')
+  async getUPIPayoutHistory(@Req() req: any) {
+    // TODO: Get from database
+    return {
+      success: true,
+      data: [],
+    };
+  }
+
+  // ============================================================================
+  // Razorpay Webhooks
+  // ============================================================================
+
+  /**
+   * Handle Razorpay webhooks
+   * POST /payments/razorpay-webhook
+   */
+  @Post('razorpay-webhook')
+  @HttpCode(HttpStatus.OK)
+  async handleRazorpayWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('x-razorpay-signature') signature: string,
+  ) {
+    const body = req.rawBody?.toString() || '';
+
+    if (!this.razorpayService.verifyWebhookSignature(body, signature)) {
+      return { received: false, error: 'Invalid signature' };
+    }
+
+    const payload = JSON.parse(body);
+    const event = payload.event;
+
+    await this.razorpayService.handleWebhook(event, payload.payload);
 
     return { received: true };
   }

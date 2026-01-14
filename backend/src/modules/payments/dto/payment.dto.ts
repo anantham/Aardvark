@@ -67,3 +67,48 @@ export class CancelSubscriptionDto {
   @IsOptional()
   cancelImmediately?: boolean;
 }
+
+// ============================================================================
+// UPI Payment DTOs
+// ============================================================================
+
+/**
+ * DTO for creating a UPI payment order
+ */
+export class CreateUPIOrderDto {
+  @IsUUID()
+  bundleId: string;
+}
+
+/**
+ * DTO for verifying UPI payment
+ */
+export class VerifyUPIPaymentDto {
+  @IsString()
+  razorpayOrderId: string;
+
+  @IsString()
+  razorpayPaymentId: string;
+
+  @IsString()
+  razorpaySignature: string;
+}
+
+/**
+ * DTO for setting up author's UPI payout account
+ */
+export class SetupUPIPayoutAccountDto {
+  @IsString()
+  upiVpa: string; // e.g., "username@upi", "phone@paytm"
+
+  @IsString()
+  accountHolderName: string;
+}
+
+/**
+ * DTO for requesting a UPI payout
+ */
+export class RequestUPIPayoutDto {
+  @IsOptional()
+  amount?: number; // In paise, defaults to full available balance
+}

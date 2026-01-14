@@ -70,7 +70,7 @@ export class AuthorEarning {
 }
 
 /**
- * Author payout account entity - Stripe Connect account for receiving payouts
+ * Author payout account entity - Stripe Connect or UPI account for receiving payouts
  */
 @Entity('author_payout_accounts')
 export class AuthorPayoutAccount {
@@ -85,8 +85,9 @@ export class AuthorPayoutAccount {
   @JoinColumn({ name: 'authorId' })
   author: User;
 
-  @Column()
-  stripeConnectAccountId: string;
+  // Stripe Connect fields
+  @Column({ nullable: true })
+  stripeConnectAccountId: string | null;
 
   @Column({
     type: 'varchar',
@@ -107,6 +108,22 @@ export class AuthorPayoutAccount {
   @Column({ length: 3, default: 'usd' })
   currency: string;
 
+  // UPI Payout fields (India)
+  @Column({ nullable: true, length: 100 })
+  upiVpa: string | null; // e.g., "username@upi", "phone@paytm"
+
+  @Column({ nullable: true, length: 100 })
+  upiAccountHolderName: string | null;
+
+  @Column({ default: false })
+  upiVerified: boolean;
+
+  @Column({ nullable: true })
+  razorpayFundAccountId: string | null; // Razorpay X fund account for payouts
+
+  @Column({ nullable: true })
+  razorpayContactId: string | null; // Razorpay X contact ID
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
@@ -115,7 +132,7 @@ export class AuthorPayoutAccount {
 }
 
 /**
- * Payout entity - tracks payout requests and status
+ * Payout entity - tracks payout requests and status (Stripe or UPI)
  */
 @Entity('payouts')
 export class Payout {
@@ -136,19 +153,37 @@ export class Payout {
   @Column({ length: 3, default: 'usd' })
   currency: string;
 
+  @Column({
+    type: 'varchar',
+    length: 20,
+    default: 'stripe',
+  })
+  paymentMethod: 'stripe' | 'upi';
+
   @Index()
   @Column({
     type: 'varchar',
     length: 20,
     default: 'pending',
   })
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'reversed';
 
+  // Stripe fields
   @Column({ nullable: true })
   stripeTransferId: string | null;
 
   @Column({ nullable: true })
   stripePayoutId: string | null;
+
+  // UPI/Razorpay fields
+  @Column({ nullable: true })
+  razorpayPayoutId: string | null;
+
+  @Column({ nullable: true, length: 100 })
+  upiVpa: string | null;
+
+  @Column({ nullable: true })
+  utr: string | null; // Unique Transaction Reference for UPI
 
   @Column({ type: 'text', nullable: true })
   failureReason: string | null;
@@ -161,4 +196,68 @@ export class Payout {
 
   @Column({ type: 'timestamptz', nullable: true })
   completedAt: Date | null;
+}
+
+/**
+ * UPI Payment Order entity - tracks UPI payment orders from users
+ */
+@Entity('upi_payment_orders')
+export class UPIPaymentOrder {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  razorpayOrderId: string;
+
+  @Index()
+  @Column('uuid')
+  userId: string;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' })
+  user: User;
+
+  @Column()
+  amountInPaise: number; // Amount in paise (₹1 = 100 paise)
+
+  @Column({ length: 3, default: 'INR' })
+  currency: string;
+
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 20,
+    default: 'created',
+  })
+  status: 'created' | 'pending' | 'authorized' | 'captured' | 'failed' | 'refunded';
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+  })
+  purpose: 'credit_purchase' | 'subscription';
+
+  @Column('uuid')
+  referenceId: string; // bundleId or planId
+
+  @Column({ nullable: true })
+  razorpayPaymentId: string | null;
+
+  @Column({ nullable: true, length: 100 })
+  vpa: string | null; // UPI VPA used for payment
+
+  @Column({ nullable: true, length: 20 })
+  method: string | null; // 'upi', 'card', 'netbanking', etc.
+
+  @Column({ length: 50 })
+  receipt: string;
+
+  @Column({ type: 'jsonb', default: {} })
+  notes: Record<string, string>;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  paidAt: Date | null;
 }

@@ -362,6 +362,151 @@ export interface SetupPayoutAccountDto {
   businessType: 'individual' | 'company';
 }
 
+// ============================================================================
+// UPI Payment System (India)
+// ============================================================================
+
+export enum PaymentProvider {
+  STRIPE = 'stripe',
+  RAZORPAY = 'razorpay',
+}
+
+export enum UPIPaymentStatus {
+  CREATED = 'created',
+  PENDING = 'pending',
+  AUTHORIZED = 'authorized',
+  CAPTURED = 'captured',
+  FAILED = 'failed',
+  REFUNDED = 'refunded',
+}
+
+export enum UPIPayoutStatus {
+  QUEUED = 'queued',
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  PROCESSED = 'processed',
+  REVERSED = 'reversed',
+  CANCELLED = 'cancelled',
+  FAILED = 'failed',
+}
+
+/**
+ * UPI Payment order (for user payments to platform)
+ */
+export interface UPIPaymentOrder {
+  id: string;
+  razorpayOrderId: string;
+  userId: string;
+  amountInPaise: number; // INR in paise
+  currency: 'INR';
+  status: UPIPaymentStatus;
+  purpose: 'credit_purchase' | 'subscription';
+  referenceId: string; // bundleId or planId
+  razorpayPaymentId: string | null;
+  vpa: string | null; // UPI VPA used
+  method: string | null; // 'upi', 'card', etc.
+  receipt: string;
+  notes: Record<string, string>;
+  createdAt: Date;
+  paidAt: Date | null;
+}
+
+/**
+ * UPI Payout (platform to author)
+ */
+export interface UPIPayout {
+  id: string;
+  razorpayPayoutId: string | null;
+  authorId: string;
+  amountInPaise: number;
+  currency: 'INR';
+  status: UPIPayoutStatus;
+  vpa: string; // Author's UPI VPA
+  purpose: 'payout';
+  narration: string;
+  referenceId: string;
+  utr: string | null; // Unique Transaction Reference
+  failureReason: string | null;
+  createdAt: Date;
+  processedAt: Date | null;
+}
+
+/**
+ * Razorpay configuration
+ */
+export interface RazorpayConfig {
+  keyId: string;
+  keySecret: string;
+  webhookSecret: string;
+}
+
+/**
+ * UPI Credit bundles in INR
+ */
+export const CREDIT_BUNDLES_INR: Omit<CreditBundle, 'id' | 'stripePriceId' | 'createdAt'>[] = [
+  {
+    name: 'Starter Pack',
+    credits: 100,
+    priceInCents: 9900, // ₹99 in paise
+    currency: 'inr',
+    bonusCredits: 0,
+    isPopular: false,
+    isActive: true,
+  },
+  {
+    name: 'Popular Pack',
+    credits: 500,
+    priceInCents: 39900, // ₹399 in paise
+    currency: 'inr',
+    bonusCredits: 50,
+    isPopular: true,
+    isActive: true,
+  },
+  {
+    name: 'Value Pack',
+    credits: 1000,
+    priceInCents: 69900, // ₹699 in paise
+    currency: 'inr',
+    bonusCredits: 150,
+    isPopular: false,
+    isActive: true,
+  },
+];
+
+// Minimum UPI payout threshold in paise (₹500 = 50000 paise)
+export const MIN_UPI_PAYOUT_AMOUNT_PAISE = 50000;
+
+// ============================================================================
+// UPI DTOs
+// ============================================================================
+
+export interface CreateUPIOrderDto {
+  bundleId: string;
+}
+
+export interface VerifyUPIPaymentDto {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+}
+
+export interface SetupUPIPayoutAccountDto {
+  upiVpa: string; // e.g., "username@upi", "phone@paytm"
+  accountHolderName: string;
+}
+
+export interface RequestUPIPayoutDto {
+  amount?: number; // Optional, defaults to full balance (in paise)
+}
+
+export interface UPIPaymentResponse {
+  orderId: string;
+  razorpayOrderId: string;
+  amountInPaise: number;
+  currency: 'INR';
+  keyId: string; // Razorpay key for frontend
+}
+
 /**
  * Response for credit balance inquiry
  */
