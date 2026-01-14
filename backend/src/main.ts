@@ -1,0 +1,132 @@
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { IoAdapter } from '@nestjs/platform-socket.io';
+import helmet from 'helmet';
+import compression from 'compression';
+import { AppModule } from './app.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+
+/**
+ * Bootstrap the NestJS application with all required middleware,
+ * interceptors, filters, and documentation.
+ */
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+  });
+
+  const configService = app.get(ConfigService);
+  const port = configService.get<number>('PORT', 4000);
+  const isProduction = configService.get('NODE_ENV') === 'production';
+
+  // Security middleware
+  app.use(helmet());
+  app.use(compression());
+
+  // CORS configuration
+  app.enableCors({
+    origin: isProduction
+      ? configService.get('CORS_ORIGIN', 'https://aardvark.com')
+      : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  });
+
+  // API versioning
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+    prefix: 'api/v',
+  });
+
+  // Global prefix for all routes
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['health', 'metrics'],
+  });
+
+  // Global validation pipe
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+      disableErrorMessages: isProduction,
+    }),
+  );
+
+  // Global exception filter
+  app.useGlobalFilters(new HttpExceptionFilter());
+
+  // Global interceptors
+  app.useGlobalInterceptors(
+    new TransformInterceptor(),
+    new LoggingInterceptor(),
+  );
+
+  // WebSocket adapter for Socket.io
+  app.useWebSocketAdapter(new IoAdapter(app));
+
+  // Swagger API documentation (disabled in production)
+  if (!isProduction) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Aardvark API')
+      .setDescription('Interactive Fiction Platform API Documentation')
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          name: 'Authorization',
+          description: 'Enter JWT token',
+          in: 'header',
+        },
+        'JWT-auth',
+      )
+      .addTag('auth', 'Authentication endpoints')
+      .addTag('users', 'User management endpoints')
+      .addTag('stories', 'Story CRUD endpoints')
+      .addTag('segments', 'Story segment endpoints')
+      .addTag('choices', 'Story choice endpoints')
+      .addTag('progress', 'Reading progress endpoints')
+      .addTag('comments', 'Comment endpoints')
+      .addTag('ratings', 'Rating and review endpoints')
+      .addTag('credits', 'Credit system endpoints')
+      .addTag('subscriptions', 'Subscription endpoints')
+      .addTag('moderation', 'Moderation endpoints')
+      .addTag('admin', 'Admin endpoints')
+      .build();
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        docExpansion: 'none',
+        filter: true,
+        showRequestDuration: true,
+      },
+    });
+  }
+
+  // Graceful shutdown
+  app.enableShutdownHooks();
+
+  await app.listen(port);
+
+  console.log(`
+    🚀 Aardvark API is running!
+    📍 Port: ${port}
+    🌍 Environment: ${configService.get('NODE_ENV', 'development')}
+    📚 API Docs: http://localhost:${port}/api/docs
+  `);
+}
+
+bootstrap();

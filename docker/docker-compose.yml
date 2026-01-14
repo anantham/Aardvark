@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: aardvark-postgres
+    environment:
+      POSTGRES_USER: aardvark
+      POSTGRES_PASSWORD: aardvark_dev_password
+      POSTGRES_DB: aardvark
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U aardvark -d aardvark']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: aardvark-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Elasticsearch for search
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: aardvark-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:9200/_cluster/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # MinIO for S3-compatible object storage (development replacement for AWS S3)
+  minio:
+    image: minio/minio:latest
+    container_name: aardvark-minio
+    environment:
+      MINIO_ROOT_USER: aardvark_minio
+      MINIO_ROOT_PASSWORD: aardvark_minio_secret
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+  # MailHog for email testing in development
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: aardvark-mailhog
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # Web UI
+    restart: unless-stopped
+
+  # Backend API (NestJS)
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: aardvark-backend
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://aardvark:aardvark_dev_password@postgres:5432/aardvark
+      REDIS_URL: redis://redis:6379
+      ELASTICSEARCH_NODE: http://elasticsearch:9200
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: aardvark_minio
+      S3_SECRET_KEY: aardvark_minio_secret
+      S3_BUCKET: aardvark-uploads
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      JWT_SECRET: dev_jwt_secret_change_in_production
+      JWT_REFRESH_SECRET: dev_refresh_secret_change_in_production
+    ports:
+      - '4000:4000'
+    volumes:
+      - ../backend:/app/backend
+      - ../shared:/app/shared
+      - /app/backend/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: aardvark-frontend
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_PUBLIC_WS_URL: ws://localhost:4000
+    ports:
+      - '3000:3000'
+    volumes:
+      - ../frontend:/app/frontend
+      - ../shared:/app/shared
+      - /app/frontend/node_modules
+      - /app/frontend/.next
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+  minio_data:
+
+networks:
+  default:
+    name: aardvark-network

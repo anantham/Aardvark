@@ -1,0 +1,57 @@
+import { ConfigService } from '@nestjs/config';
+import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+
+/**
+ * TypeORM database configuration factory.
+ * Configures connection pooling, logging, and entity loading.
+ */
+export const databaseConfig = (
+  configService: ConfigService,
+): TypeOrmModuleOptions => {
+  const isProduction = configService.get('NODE_ENV') === 'production';
+
+  return {
+    type: 'postgres',
+    host: configService.get('database.host'),
+    port: configService.get('database.port'),
+    username: configService.get('database.username'),
+    password: configService.get('database.password'),
+    database: configService.get('database.database'),
+
+    // Entity loading - auto-load all entities from modules
+    autoLoadEntities: true,
+
+    // Schema synchronization - disabled in production
+    synchronize: !isProduction,
+
+    // Logging configuration
+    logging: isProduction ? ['error', 'warn'] : ['error', 'warn', 'query'],
+    logger: 'advanced-console',
+
+    // Connection pool settings
+    extra: {
+      min: configService.get('database.poolMin', 2),
+      max: configService.get('database.poolMax', 10),
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    },
+
+    // SSL configuration for production
+    ssl: isProduction
+      ? {
+          rejectUnauthorized: false,
+        }
+      : false,
+
+    // Retry configuration
+    retryAttempts: 3,
+    retryDelay: 1000,
+
+    // Cache configuration (TypeORM query cache)
+    cache: {
+      type: 'database',
+      tableName: 'query_result_cache',
+      duration: 30000, // 30 seconds
+    },
+  };
+};
