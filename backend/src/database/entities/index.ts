@@ -13,3 +13,4 @@ export * from './rating.entity';
 export * from './transaction.entity';
 export * from './notification.entity';
 export * from './follow.entity';
+export * from './branch-submission.entity';
