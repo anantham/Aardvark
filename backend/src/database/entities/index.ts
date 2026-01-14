@@ -14,3 +14,6 @@ export * from './transaction.entity';
 export * from './notification.entity';
 export * from './follow.entity';
 export * from './branch-submission.entity';
+export * from './subscription.entity';
+export * from './credit-bundle.entity';
+export * from './author-earning.entity';
