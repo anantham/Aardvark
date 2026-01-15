@@ -18,5 +18,11 @@ export * from './monetization.types';
 // Moderation types
 export * from './moderation.types';
 
+// Messaging types
+export * from './messaging.types';
+
+// Forum types
+export * from './forum.types';
+
 // Common types
 export * from './common.types';

@@ -17,3 +17,6 @@ export * from './branch-submission.entity';
 export * from './subscription.entity';
 export * from './credit-bundle.entity';
 export * from './author-earning.entity';
+export * from './message.entity';
+export * from './forum.entity';
+export * from './moderation.entity';

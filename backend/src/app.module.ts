@@ -21,6 +21,10 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ModerationModule } from './modules/moderation/moderation.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { AiModule } from './modules/ai/ai.module';
+import { AICompanionModule } from './modules/ai-companion/ai-companion.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
+import { ForumModule } from './modules/forum/forum.module';
 import { WebsocketModule } from './modules/websocket/websocket.module';
 import { HealthModule } from './modules/health/health.module';
 
@@ -89,6 +93,10 @@ import { databaseConfig } from './config/database.config';
     ModerationModule,
     UploadModule,
     AiModule,
+    AICompanionModule,
+    AnalyticsModule,
+    MessagingModule,
+    ForumModule,
     WebsocketModule,
     HealthModule,
   ],

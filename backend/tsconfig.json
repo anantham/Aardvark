@@ -19,7 +19,8 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["src/*"],
-      "@aardvark/shared": ["../shared/src"]
+      "@aardvark/shared": ["../shared/src"],
+      "@entities": ["src/database/entities"]
     }
   },
   "include": ["src/**/*"],
