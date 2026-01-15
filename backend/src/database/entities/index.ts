@@ -20,3 +20,4 @@ export * from './author-earning.entity';
 export * from './message.entity';
 export * from './forum.entity';
 export * from './moderation.entity';
+export * from './tag.entity';

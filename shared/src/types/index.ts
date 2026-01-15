@@ -9,6 +9,9 @@ export * from './user.types';
 // Story and branching types
 export * from './story.types';
 
+// Tag system types
+export * from './tag.types';
+
 // Social features types
 export * from './social.types';
 

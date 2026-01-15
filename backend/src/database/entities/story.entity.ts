@@ -6,6 +6,8 @@ import {
   UpdateDateColumn,
   ManyToOne,
   OneToMany,
+  ManyToMany,
+  JoinTable,
   Index,
   JoinColumn,
 } from 'typeorm';
@@ -23,6 +25,7 @@ import { ReaderProgress } from './reader-progress.entity';
 import { Comment } from './comment.entity';
 import { Rating } from './rating.entity';
 import { StoryStateVariable } from './story-state-variable.entity';
+import { Tag } from './tag.entity';
 
 /**
  * Story entity representing an interactive fiction story.
@@ -169,6 +172,14 @@ export class Story {
 
   @OneToMany(() => StoryStateVariable, (variable) => variable.story)
   stateVariables: StoryStateVariable[];
+
+  @ManyToMany(() => Tag, (tag) => tag.stories)
+  @JoinTable({
+    name: 'story_tags',
+    joinColumn: { name: 'storyId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'tagId', referencedColumnName: 'id' },
+  })
+  storyTags: Tag[];
 
   /**
    * Check if story is publicly readable

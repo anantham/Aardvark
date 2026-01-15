@@ -135,3 +135,84 @@ export class AutocompleteDto {
   @Max(20)
   limit?: number = 10;
 }
+
+export class SearchTagsDto {
+  @ApiProperty({ description: 'Search query' })
+  @IsString()
+  @MaxLength(100)
+  query: string;
+
+  @ApiPropertyOptional({ description: 'Filter by tag type' })
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @ApiPropertyOptional({ description: 'Page number', default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ description: 'Results per page', default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
+}
+
+export class AdvancedSearchDto {
+  @ApiPropertyOptional({ description: 'Text search query' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  query?: string;
+
+  @ApiPropertyOptional({ description: 'Tag IDs to filter by', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tagIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Tag names to filter by', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tagNames?: string[];
+
+  @ApiPropertyOptional({ description: 'Require all tags (AND) vs any tag (OR)', default: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  matchAllTags?: boolean = false;
+
+  @ApiPropertyOptional({ description: 'Filter by categories', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(StoryCategory, { each: true })
+  categories?: StoryCategory[];
+
+  @ApiPropertyOptional({ description: 'Minimum rating (0-5)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  minRating?: number;
+
+  @ApiPropertyOptional({ description: 'Page number', default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ description: 'Results per page', default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
+}
