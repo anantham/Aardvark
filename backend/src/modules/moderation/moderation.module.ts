@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
 import { ModerationController } from './moderation.controller';
 import { ModerationService } from './moderation.service';
+import { ContentFilterService } from './content-filter.service';
 import {
   Report,
   ModerationLog,
@@ -17,6 +19,7 @@ import {
  */
 @Module({
   imports: [
+    ConfigModule,
     TypeOrmModule.forFeature([
       Report,
       ModerationLog,
@@ -27,7 +30,7 @@ import {
     ]),
   ],
   controllers: [ModerationController],
-  providers: [ModerationService],
-  exports: [ModerationService],
+  providers: [ModerationService, ContentFilterService],
+  exports: [ModerationService, ContentFilterService],
 })
 export class ModerationModule {}

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, MoreThanOrEqual } from 'typeorm';
 import OpenAI from 'openai';
 import { User, Transaction } from '@/database/entities';
 import { TransactionType } from '@aardvark/shared';
@@ -17,8 +17,10 @@ import {
   AIGenerateCharacterResponse,
   AIGenerateDialogueResponse,
   AISummarizeStoryResponse,
+  AIGeneratePlotIdeasResponse,
   AICreditsResponse,
   AIOperationType,
+  AI_RATE_LIMITS,
 } from './ai-companion.types';
 
 /**
@@ -36,6 +38,7 @@ export class AICompanionService {
     [AIOperationType.GENERATE_DIALOGUE]: 6,
     [AIOperationType.SUMMARIZE_STORY]: 5,
     [AIOperationType.CHECK_PLAGIARISM]: 15,
+    [AIOperationType.GENERATE_PLOT_IDEAS]: 8,
   };
 
   constructor(
@@ -403,7 +406,7 @@ Return JSON: { "summary": "...", "keyPoints": ["...", "..."] }`;
   }
 
   /**
-   * Check if user has sufficient credits
+   * Check if user has sufficient credits and is within rate limits
    */
   async checkCredits(userId: string, operation: AIOperationType): Promise<AICreditsResponse> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
@@ -413,20 +416,109 @@ Return JSON: { "summary": "...", "keyPoints": ["...", "..."] }`;
 
     const creditsRequired = this.creditsPerOperation[operation];
     const isPremium = user.isPremium;
-    const unlimitedAccess = isPremium; // Premium users have unlimited AI access
 
-    if (!unlimitedAccess && user.creditsBalance < creditsRequired) {
-      throw new BadRequestException(
-        `Insufficient credits. Required: ${creditsRequired}, Available: ${user.creditsBalance}`,
-      );
+    // Check rate limit for premium users (50 requests/day)
+    if (isPremium) {
+      const dailyUsage = await this.getDailyUsageCount(userId);
+      if (dailyUsage >= AI_RATE_LIMITS.PREMIUM_DAILY_LIMIT) {
+        throw new BadRequestException(
+          `Daily AI request limit reached (${AI_RATE_LIMITS.PREMIUM_DAILY_LIMIT}/day). Limit resets at midnight UTC.`,
+        );
+      }
+    } else {
+      // Non-premium users pay credits
+      if (user.creditsBalance < creditsRequired) {
+        throw new BadRequestException(
+          `Insufficient credits. Required: ${creditsRequired}, Available: ${user.creditsBalance}`,
+        );
+      }
     }
 
     return {
       remainingCredits: user.creditsBalance,
       isPremium,
-      unlimitedAccess,
-      creditsPerRequest: creditsRequired,
+      unlimitedAccess: isPremium,
+      creditsPerRequest: isPremium ? 0 : creditsRequired,
     };
+  }
+
+  /**
+   * Get the count of AI requests made by user today
+   */
+  private async getDailyUsageCount(userId: string): Promise<number> {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const count = await this.transactionRepository.count({
+      where: {
+        userId,
+        type: TransactionType.AI_COMPANION,
+        createdAt: MoreThanOrEqual(today),
+      },
+    });
+
+    return count;
+  }
+
+  /**
+   * Generate plot ideas for a story
+   */
+  async generatePlotIdeas(
+    userId: string,
+    genre: string,
+    themes?: string[],
+    numIdeas: number = 3,
+  ): Promise<AIGeneratePlotIdeasResponse> {
+    await this.checkCredits(userId, AIOperationType.GENERATE_PLOT_IDEAS);
+
+    try {
+      const systemPrompt = `You are a creative writing consultant specializing in interactive fiction.
+Generate ${numIdeas} unique and compelling story plot ideas.
+Each idea should be suitable for a branching narrative with multiple paths.
+Return JSON: { "ideas": [{ "title": "...", "synopsis": "...", "themes": ["...", "..."], "conflictType": "..." }, ...] }`;
+
+      let userPrompt = `Generate ${numIdeas} plot ideas for the genre: ${genre}`;
+      if (themes && themes.length > 0) {
+        userPrompt += `\nIncorporate these themes: ${themes.join(', ')}`;
+      }
+      userPrompt += '\n\nProvide creative, engaging plot ideas with branching potential.';
+
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 800,
+        temperature: 0.9,
+        response_format: { type: 'json_object' },
+      });
+
+      const response = JSON.parse(
+        completion.choices[0]?.message?.content || '{"ideas": []}'
+      );
+      const tokenCount = completion.usage?.total_tokens || 0;
+      const creditsUsed = this.creditsPerOperation[AIOperationType.GENERATE_PLOT_IDEAS];
+
+      await this.logUsage(userId, AIOperationType.GENERATE_PLOT_IDEAS, tokenCount, creditsUsed, true);
+      await this.deductCredits(userId, AIOperationType.GENERATE_PLOT_IDEAS, tokenCount);
+
+      return {
+        ideas: response.ideas || [],
+        tokenCount,
+        creditsUsed,
+      };
+    } catch (error) {
+      await this.logUsage(
+        userId,
+        AIOperationType.GENERATE_PLOT_IDEAS,
+        0,
+        0,
+        false,
+        error.message,
+      );
+      throw new InternalServerErrorException('Failed to generate plot ideas');
+    }
   }
 
   /**

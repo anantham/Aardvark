@@ -118,3 +118,26 @@ export class SummarizeStoryDto {
   @Max(500)
   maxWords?: number = 200;
 }
+
+/**
+ * DTO for generating plot ideas
+ */
+export class GeneratePlotIdeasDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  genre: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(5)
+  themes?: string[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  @Type(() => Number)
+  numIdeas?: number = 3;
+}

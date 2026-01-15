@@ -15,6 +15,7 @@ import {
   GenerateCharacterDto,
   GenerateDialogueDto,
   SummarizeStoryDto,
+  GeneratePlotIdeasDto,
 } from './dto';
 
 /**
@@ -142,6 +143,27 @@ export class AICompanionController {
       userId,
       dto.content,
       dto.maxWords,
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  /**
+   * Generate plot ideas with AI
+   * POST /ai/generate-plot-ideas
+   */
+  @Post('generate-plot-ideas')
+  @HttpCode(HttpStatus.OK)
+  async generatePlotIdeas(@Req() req: any, @Body() dto: GeneratePlotIdeasDto) {
+    const userId = req.user?.id || 'mock-user-id';
+    const result = await this.aiCompanionService.generatePlotIdeas(
+      userId,
+      dto.genre,
+      dto.themes,
+      dto.numIdeas,
     );
 
     return {

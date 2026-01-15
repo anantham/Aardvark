@@ -59,6 +59,17 @@ export interface AIPlagiarismCheckResponse {
   creditsUsed: number;
 }
 
+export interface AIGeneratePlotIdeasResponse {
+  ideas: {
+    title: string;
+    synopsis: string;
+    themes: string[];
+    conflictType: string;
+  }[];
+  tokenCount: number;
+  creditsUsed: number;
+}
+
 export interface AICreditsResponse {
   remainingCredits: number;
   isPremium: boolean;
@@ -85,7 +96,14 @@ export enum AIOperationType {
   GENERATE_DIALOGUE = 'generate_dialogue',
   SUMMARIZE_STORY = 'summarize_story',
   CHECK_PLAGIARISM = 'check_plagiarism',
+  GENERATE_PLOT_IDEAS = 'generate_plot_ideas',
 }
+
+/** Rate limits for AI operations */
+export const AI_RATE_LIMITS = {
+  PREMIUM_DAILY_LIMIT: 50, // Premium users: 50 requests/day
+  FREE_CREDITS_PER_REQUEST: 5, // Free users pay credits per request
+};
 
 export interface OpenAIConfig {
   apiKey: string;

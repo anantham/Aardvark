@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { Public } from '@/modules/auth/decorators/public.decorator';
 import { StoriesService } from './stories.service';
+import { RecommendationService } from './recommendation.service';
 import { CreateStoryDto, UpdateStoryDto, StoryQueryParams, UserRole } from '@aardvark/shared';
 
 /**
@@ -22,7 +23,10 @@ import { CreateStoryDto, UpdateStoryDto, StoryQueryParams, UserRole } from '@aar
 @ApiTags('stories')
 @Controller('stories')
 export class StoriesController {
-  constructor(private readonly storiesService: StoriesService) {}
+  constructor(
+    private readonly storiesService: StoriesService,
+    private readonly recommendationService: RecommendationService,
+  ) {}
 
   /**
    * Create a new story
@@ -71,6 +75,60 @@ export class StoriesController {
   @ApiOperation({ summary: 'Get trending stories' })
   findTrending(@Query('limit') limit?: number) {
     return this.storiesService.findTrending(limit);
+  }
+
+  /**
+   * Get popular stories (all-time)
+   */
+  @Get('popular')
+  @Public()
+  @ApiOperation({ summary: 'Get popular stories' })
+  findPopular(@Query('limit') limit?: number) {
+    return this.recommendationService.getPopularStories(limit || 10);
+  }
+
+  /**
+   * Get personalized recommendations for authenticated user
+   */
+  @Get('recommendations')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Get personalized story recommendations' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getRecommendations(
+    @Request() req: { user: { userId: string } },
+    @Query('limit') limit?: number,
+  ) {
+    return this.recommendationService.getRecommendations(req.user.userId, limit || 10);
+  }
+
+  /**
+   * Get stories from followed authors
+   */
+  @Get('following')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Get stories from followed authors' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getFollowingStories(
+    @Request() req: { user: { userId: string } },
+    @Query('limit') limit?: number,
+  ) {
+    return this.recommendationService.getStoriesFromFollowedAuthors(req.user.userId, limit || 10);
+  }
+
+  /**
+   * Get similar stories to a given story
+   */
+  @Get(':id/similar')
+  @Public()
+  @ApiOperation({ summary: 'Get similar stories' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getSimilarStories(
+    @Param('id') id: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.recommendationService.getSimilarStories(id, limit || 5);
   }
 
   /**
