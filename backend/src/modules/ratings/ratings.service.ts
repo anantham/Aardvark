@@ -3,16 +3,20 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Rating, Story, ReaderProgress } from '@/database/entities';
+import { Repository, MoreThanOrEqual, DataSource } from 'typeorm';
+import { Rating, Story, ReaderProgress, Transaction, User } from '@/database/entities';
 import { CreateRatingDto, UpdateRatingDto, RatingQueryDto } from './dto';
+import { TransactionType, DEFAULT_CREDIT_CONFIG } from '@aardvark/shared';
 import * as sanitizeHtml from 'sanitize-html';
 import { marked } from 'marked';
 
 @Injectable()
 export class RatingsService {
+  private readonly logger = new Logger(RatingsService.name);
+
   constructor(
     @InjectRepository(Rating)
     private readonly ratingRepository: Repository<Rating>,
@@ -20,6 +24,11 @@ export class RatingsService {
     private readonly storyRepository: Repository<Story>,
     @InjectRepository(ReaderProgress)
     private readonly progressRepository: Repository<ReaderProgress>,
+    @InjectRepository(Transaction)
+    private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -68,6 +77,11 @@ export class RatingsService {
 
     // Update story's rating statistics
     await this.updateStoryRatingStats(createDto.storyId);
+
+    // Award credit for review (if review text provided and user hasn't exceeded daily limit)
+    if (createDto.reviewText && createDto.reviewText.length >= 50) {
+      await this.awardReviewCredit(userId, savedRating.id, story.title);
+    }
 
     // Load user relation for response
     return this.ratingRepository.findOne({
@@ -286,6 +300,68 @@ export class RatingsService {
   // ============================================================================
   // Private Helper Methods
   // ============================================================================
+
+  /**
+   * Award credit for writing a review (max 5/day per design doc)
+   */
+  private async awardReviewCredit(
+    userId: string,
+    ratingId: string,
+    storyTitle: string,
+  ): Promise<void> {
+    try {
+      // Check daily limit
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+
+      const todayReviewRewards = await this.transactionRepository.count({
+        where: {
+          userId,
+          type: TransactionType.REVIEW_REWARD,
+          createdAt: MoreThanOrEqual(today),
+        },
+      });
+
+      if (todayReviewRewards >= DEFAULT_CREDIT_CONFIG.maxReviewRewardsPerDay) {
+        this.logger.log(
+          `User ${userId} has reached daily review reward limit (${DEFAULT_CREDIT_CONFIG.maxReviewRewardsPerDay})`,
+        );
+        return;
+      }
+
+      // Award credit
+      await this.dataSource.transaction(async (manager) => {
+        const userRepo = manager.getRepository(User);
+        const txRepo = manager.getRepository(Transaction);
+
+        const user = await userRepo.findOne({
+          where: { id: userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!user) return;
+
+        const newBalance = user.creditsBalance + DEFAULT_CREDIT_CONFIG.reviewRewardCredits;
+        await userRepo.update(userId, { creditsBalance: newBalance });
+
+        const transaction = txRepo.create({
+          userId,
+          type: TransactionType.REVIEW_REWARD,
+          amount: DEFAULT_CREDIT_CONFIG.reviewRewardCredits,
+          balance: newBalance,
+          description: `Review reward for "${storyTitle}"`,
+          referenceId: ratingId,
+          referenceType: 'rating',
+        });
+
+        await txRepo.save(transaction);
+        this.logger.log(`Awarded ${DEFAULT_CREDIT_CONFIG.reviewRewardCredits} credit(s) to user ${userId} for review`);
+      });
+    } catch (error) {
+      // Don't fail the rating creation if credit award fails
+      this.logger.error(`Failed to award review credit: ${error.message}`);
+    }
+  }
 
   private async updateStoryRatingStats(storyId: string): Promise<void> {
     const result = await this.ratingRepository
