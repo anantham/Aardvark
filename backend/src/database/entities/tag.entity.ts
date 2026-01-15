@@ -1,0 +1,115 @@
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Index,
+  ManyToOne,
+  OneToMany,
+  ManyToMany,
+  JoinColumn,
+} from 'typeorm';
+import { TagType } from '@aardvark/shared';
+import { Story } from './story.entity';
+
+/**
+ * Tag entity for story categorization and discovery.
+ * Tags can be official (curated) or user-created.
+ */
+@Entity('tags')
+export class Tag {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Index({ unique: true })
+  @Column({ length: 50 })
+  name: string;
+
+  @Index({ unique: true })
+  @Column({ length: 60 })
+  slug: string;
+
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
+  @Index()
+  @Column({
+    type: 'enum',
+    enum: TagType,
+    default: TagType.CUSTOM,
+  })
+  type: TagType;
+
+  @Index()
+  @Column({ default: 0 })
+  usageCount: number;
+
+  @Column({ default: false })
+  isOfficial: boolean;
+
+  @Index()
+  @Column({ default: false })
+  isFeatured: boolean;
+
+  @Column('uuid', { nullable: true })
+  parentTagId: string | null;
+
+  @ManyToOne(() => Tag, (tag) => tag.childTags, { nullable: true })
+  @JoinColumn({ name: 'parentTagId' })
+  parentTag: Tag | null;
+
+  @OneToMany(() => Tag, (tag) => tag.parentTag)
+  childTags: Tag[];
+
+  @Column('text', { array: true, default: [] })
+  synonyms: string[];
+
+  @Column({ length: 7, nullable: true })
+  color: string | null;
+
+  @Column({ nullable: true })
+  iconUrl: string | null;
+
+  @ManyToMany(() => Story, (story) => story.storyTags)
+  stories: Story[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+/**
+ * StoryTag join table entity for many-to-many relationship
+ * with additional metadata about the tagging
+ */
+@Entity('story_tags')
+@Index(['storyId', 'tagId'], { unique: true })
+export class StoryTag {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Index()
+  @Column('uuid')
+  storyId: string;
+
+  @Index()
+  @Column('uuid')
+  tagId: string;
+
+  @ManyToOne(() => Story, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'storyId' })
+  story: Story;
+
+  @ManyToOne(() => Tag, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'tagId' })
+  tag: Tag;
+
+  @Column('uuid', { nullable: true })
+  addedByUserId: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  addedAt: Date;
+}

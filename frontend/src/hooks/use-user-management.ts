@@ -1,0 +1,139 @@
+'use client';
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchApi } from '@/lib/api';
+import type {
+  User,
+  UserWarning,
+  UserBan,
+  IssueWarningDto,
+  IssueBanDto,
+  PaginatedResponse,
+} from '@aardvark/shared';
+
+/**
+ * User list query parameters
+ */
+export interface UserListQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  role?: string;
+  status?: 'active' | 'banned' | 'suspended';
+  sortBy?: 'createdAt' | 'username' | 'email';
+  sortOrder?: 'asc' | 'desc';
+}
+
+/**
+ * Hook for fetching user list with pagination and filtering
+ */
+export function useUserList(query: UserListQuery = {}, token?: string) {
+  return useQuery({
+    queryKey: ['userList', query],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      Object.entries(query).forEach(([key, value]) => {
+        if (value !== undefined) params.append(key, String(value));
+      });
+
+      return fetchApi<PaginatedResponse<User>>(
+        `/admin/users?${params}`,
+        { token }
+      );
+    },
+    enabled: !!token,
+  });
+}
+
+/**
+ * Hook for fetching warnings for a specific user
+ */
+export function useUserWarnings(userId: string, token?: string) {
+  return useQuery({
+    queryKey: ['userWarnings', userId],
+    queryFn: () =>
+      fetchApi<UserWarning[]>(`/admin/users/${userId}/warnings`, {
+        token,
+      }),
+    enabled: !!token && !!userId,
+  });
+}
+
+/**
+ * Hook for fetching bans for a specific user
+ */
+export function useUserBans(userId: string, token?: string) {
+  return useQuery({
+    queryKey: ['userBans', userId],
+    queryFn: () =>
+      fetchApi<UserBan[]>(`/admin/users/${userId}/bans`, {
+        token,
+      }),
+    enabled: !!token && !!userId,
+  });
+}
+
+/**
+ * Hook for issuing user warnings
+ */
+export function useIssueWarning(token?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: IssueWarningDto) =>
+      fetchApi<UserWarning>('/admin/moderation/warnings', {
+        method: 'POST',
+        body: JSON.stringify(data),
+        token,
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['userWarnings', variables.userId] });
+      queryClient.invalidateQueries({ queryKey: ['userList'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['moderationStats'] });
+    },
+  });
+}
+
+/**
+ * Hook for issuing user bans
+ */
+export function useIssueBan(token?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: IssueBanDto) =>
+      fetchApi<UserBan>('/admin/moderation/bans', {
+        method: 'POST',
+        body: JSON.stringify(data),
+        token,
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['userBans', variables.userId] });
+      queryClient.invalidateQueries({ queryKey: ['userList'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['moderationStats'] });
+    },
+  });
+}
+
+/**
+ * Hook for lifting a ban
+ */
+export function useLiftBan(token?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (banId: string) =>
+      fetchApi<void>(`/admin/moderation/bans/${banId}/lift`, {
+        method: 'POST',
+        token,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userBans'] });
+      queryClient.invalidateQueries({ queryKey: ['userList'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['moderationStats'] });
+    },
+  });
+}

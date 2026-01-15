@@ -1,0 +1,17 @@
+{
+  "name": "@aardvark/shared",
+  "version": "1.0.0",
+  "description": "Shared types and utilities for Aardvark platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "lint": "eslint src --ext .ts",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  }
+}
